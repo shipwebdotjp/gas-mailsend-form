@@ -69,6 +69,7 @@ function processSendEmail(form) {
 
     let attachmentBlobs = [];
     if (form["attachment"] != null) {
+        let attachment_size_total = 0;
         for (var i = 0; i < form["attachment"].length; i++) {
             var reader_result = form["attachment"][i]["data"];  //アップロードされたデータ
             var file_name = form["attachment"][i]["name"];  //ファイル名
@@ -76,9 +77,15 @@ function processSendEmail(form) {
             var content_type = result_split[0].split(';')[0].replace('data:', ''); //ファイルのMINEタイプ
             var row_data = result_split[1]; //ファイルの実データ
             var data = Utilities.base64Decode(row_data); //base64エンコードされた文字列からバイナリへデコード
-            attachmentBlobs.push(Utilities.newBlob(data, content_type, file_name));
+            const new_blob = Utilities.newBlob(data, content_type, file_name);
+            attachmentBlobs.push(new_blob);
+            attachment_size_total += new_blob.getBytes().length;
             //console.log(attachmentBlob.getName() + " ContentType: " + attachmentBlob.getContentType() + " size: "+attachmentBlob.getBytes().length);
         }
+        //所有附件的容量超过25MB
+
+
+
     }
     var mySheet = SpreadsheetApp.getActiveSheet();  //アクティブシートを取得
     if (!mySheet) {
@@ -113,7 +120,7 @@ function processSendEmail(form) {
             }
             var subject = replaceString(form["subject"], userData);
             var body = replaceString(form["body"], userData);
-            var htmlbody = replaceString(form["htmlbody"], userData);
+            var htmlbody = replaceStringHTML(form["htmlbody"], userData);
             const attachment = getGoogleDriveFile(userData["attachment1"], attachmentFolder);
 
             if (regexp.test(userData["mail"])) {
@@ -212,14 +219,14 @@ function createAttachment() {
     }
 }
 
-//replace content
+//replace content of document
 function replaceContent(doc, replaceLists) {
     //get body and replace string
     const body = doc.getBody();
     Object.keys(replaceLists).forEach(key => {
         body.replaceText(`\{${key}\}`, replaceLists[key]);
     })
-    //save
+    //save and close
     doc.saveAndClose();
     return doc;
 }
@@ -232,10 +239,17 @@ function replaceString(str, replaceLists) {
     return str;
 }
 
+//replace string to HTML
+function replaceStringHTML(str, replaceLists) {
+    Object.keys(replaceLists).forEach(key => {
+        str = str.replace(new RegExp(`\{${key}\}`, "gi"), nl2br(replaceLists[key]));
+    })
+    return str;
+}
+
 //recognize Google drive file ID or URL or filename and return file ID
 function getGoogleDriveFile(str, attachmentFolder) {
     if (fileId = str.match(/([-\w]{25,}(?!.*[-\w]{25,}))/)) {
-        console.log(fileId[1]);
         return DriveApp.getFileById(fileId[1]);
     } else if (str != "") {
         //get file by file name
@@ -252,5 +266,10 @@ function getFileByName(file_name, folder) {
         return files.next();
     }
     return null;
+}
+
+// nl2br
+function nl2br(str) {
+    return str.replace(/([^>\r\n]?)(\r\n|\n\r|\r|\n)/g, '$1<br>$2');
 }
 

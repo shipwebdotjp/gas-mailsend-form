@@ -55,7 +55,7 @@ function getSettings() {
 //メールの送信
 function processSendEmail(form) {
     settings = getSettings();
-    const attachmentFolder = DriveApp.getFolderById(settings["attachmentFolderId"]);
+    const attachmentFolder = settings["attachmentFolderId"] ? DriveApp.getFolderById(settings["attachmentFolderId"]) : null;
 
     if (form["group"].length == 0) {
         return { "error": true, "message": "グループを選択してください。" }
@@ -80,12 +80,7 @@ function processSendEmail(form) {
             const new_blob = Utilities.newBlob(data, content_type, file_name);
             attachmentBlobs.push(new_blob);
             attachment_size_total += new_blob.getBytes().length;
-            //console.log(attachmentBlob.getName() + " ContentType: " + attachmentBlob.getContentType() + " size: "+attachmentBlob.getBytes().length);
         }
-        //所有附件的容量超过25MB
-
-
-
     }
     var mySheet = SpreadsheetApp.getActiveSheet();  //アクティブシートを取得
     if (!mySheet) {
@@ -143,7 +138,7 @@ function processSendEmail(form) {
         return { "error": true, "message": '次のメールアドレスが正しくありません：' + errors.join(',') }
     }
 
-    if (sendque.length > MailApp.getRemainingDailyQuota()) { //送信予定数が残りの一日の送信可能数を超える場合
+    if (!form["draft"] && sendque.length > MailApp.getRemainingDailyQuota()) { //送信予定数が残りの一日の送信可能数を超える場合
         console.log('一日の送信可能数を超えるため送信できません。本日残り可能送信数：' + MailApp.getRemainingDailyQuota());
         return { "error": true, "message": '一日の送信可能数を超えるため送信できません。本日残り可能送信数：' + MailApp.getRemainingDailyQuota() }
     }
@@ -160,7 +155,23 @@ function processSendEmail(form) {
             sendque[i]["attachments"] = sendque[i]["attachments"].concat(attachmentBlobs);
         }
         try {
-            MailApp.sendEmail(sendque[i]);
+            const recipient = sendque[i]["to"];
+            const subject = sendque[i]["subject"];
+            const body = sendque[i]["body"];
+            const options = {
+                attachments: sendque[i]["attachments"],
+                htmlBody: sendque[i]["htmlBody"],
+                from: sendque[i]["from"],
+                name: sendque[i]["name"],
+            }
+            if (form["draft"]) {
+                //create draft by GMailApp.createDraft
+                GmailApp.createDraft(recipient, subject, body, options);
+            } else {
+                //send email by GmailApp
+                GmailApp.sendEmail(recipient, subject, body, options);
+            }
+
             sended.push(sendque[i]["to"]);
         } catch (e) {
             console.log(e.message);
@@ -170,8 +181,8 @@ function processSendEmail(form) {
     }
 
     if (sended.length > 0) {
-        console.log("メールを送信しました。" + sended.join(','));
-        return { "error": false, "message": "メールを送信しました。", "sended": sended, "errors": errors, "quota": MailApp.getRemainingDailyQuota() }
+        console.log("メールを" + (form["draft"] ? "保存" : "送信") + sended.join(','));
+        return { "error": false, "message": "メールを" + (form["draft"] ? "下書き保存" : "送信") + "しました。", "sended": sended, "errors": errors, "quota": MailApp.getRemainingDailyQuota() }
     } else {
         return { "error": true, "message": "該当する送信先がありません。", "errors": errors }
     }
@@ -179,7 +190,7 @@ function processSendEmail(form) {
 
 function createAttachment() {
     settings = getSettings();
-    const attachmentFolder = DriveApp.getFolderById(settings["attachmentFolderId"]);
+    const attachmentFolder = settings["attachmentFolderId"] ? DriveApp.getFolderById(settings["attachmentFolderId"]) : null;
     const templateDocument = getGoogleDriveFile(settings["templateDocumentId"], attachmentFolder);
     //get active sheet
     const mySheet = SpreadsheetApp.getActiveSheet();
@@ -251,7 +262,7 @@ function replaceStringHTML(str, replaceLists) {
 function getGoogleDriveFile(str, attachmentFolder) {
     if (fileId = str.match(/([-\w]{25,}(?!.*[-\w]{25,}))/)) {
         return DriveApp.getFileById(fileId[1]);
-    } else if (str != "") {
+    } else if (str != "" && attachmentFolder != null) {
         //get file by file name
         return getFileByName(str, attachmentFolder);
     }

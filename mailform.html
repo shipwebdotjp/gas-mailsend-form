@@ -113,13 +113,19 @@ Vue.component('component-mailform', {
         document.registForm.reset();
       }
     },
-    handleRegister: function(){
-      this.result.message = "メールを送信しています・・・";
+    handleCreateDraft: function(){
+      this.sendEmail(true);
+    },
+    handleRegister: function(event){
+      this.sendEmail(false);
+    },
+    sendEmail: function(draft = false){
+      this.result.message = (draft ? "下書きを保存しています・・・":"メールを送信しています・・・");
       this.state = "uploading";
       google.script.run
         .withSuccessHandler(this.registReturnHandler)
-        .withFailureHandler(this.registReturnHandler).processSendEmail({"group":this.group,"subject":this.subject,"body":this.body, "htmlbody":this.compiledMarkdown, "attachment":this.selectedFile});
-    },       
+        .withFailureHandler(this.registReturnHandler).processSendEmail({"draft": draft, "group":this.group,"subject":this.subject,"body":this.body, "htmlbody":this.compiledMarkdown, "attachment":this.selectedFile});
+    },
     fileSelected: async function(e) {
       var files = e.target.files;
       if(files.length > 0) {
@@ -190,15 +196,18 @@ Vue.component('component-mailform', {
         </label>
       </div>
 
-      <div>
-        <button type="submit" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+      <div class="flex items-center">
+        <button type="submit" name="send" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
           メール送信
+        </button>
+        <button type="button" @click.prevent="handleCreateDraft" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-600 hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+          下書き保存
         </button>
       </div>
   
     </div>
   </form>
- 
+
   <div v-if="state=='uploading'">
     <component-loading>{{ result.message }}</component-loading>
   </div>
@@ -210,7 +219,7 @@ Vue.component('component-mailform', {
     <div v-else>
       <component-alert-success >{{ result.message }}</component-alert-success>
       <div>
-        {{result.sended.length}}件送信しました。本日残り{{ result.quota }}件送信可能です。
+        計：{{result.sended.length}}件　残り送信可能件数：{{ result.quota }}件
       </div>
       <div class="border overflow-auto w-full h-32 text-sm">
         <div v-for="(to, index) in result.sended">{{to}}</div>
